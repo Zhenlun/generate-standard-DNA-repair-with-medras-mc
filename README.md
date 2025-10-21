@@ -4,3 +4,5 @@ aims to output a file containing:
 - all the DSB ends before any repair
 - DSB ends that werent joined with their original ends and their index
 - associated Medras-MC misrepair spectrum information
+
+2025-10-21: now does the first 2 points
