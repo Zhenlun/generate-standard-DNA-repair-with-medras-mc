@@ -86,9 +86,11 @@ def pickRepair(interactionArray,n):
 
     return chosenInteraction
 
-def singleRepair(breakList,rateTable,sigma=None, finalTime = np.inf):
+def singleRepair(filename, breakList,rateTable,sigma=None, finalTime = np.inf):
 
-    with open("my_new_file.txtn", "w") as file:
+    outfilename = str(filename.split(".")[0]) + ".txtn"
+    #with open("my_new_file.txtn", "w") as file:
+    with open(outfilename, "w") as file:
 
         #write all the breaks to file
         printBreak = copy.deepcopy(breakList)

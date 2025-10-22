@@ -126,7 +126,7 @@ def misrepairSpectrum(fileData, header, fileName):
 	for m,breakList in enumerate(allBreaks):
 		if m>=maxExposures:
 			break
-		misrepList,repList, remBreaks = calcMR.singleRepair(copy.deepcopy(breakList), None, 
+		misrepList,repList, remBreaks = calcMR.singleRepair(fileName, copy.deepcopy(breakList), None, 
 															scaledSigma, finalTime = simulationLimit)
 		trimMisrep, trimRemBreaks = prepareDamage(misrepList, remBreaks, baseChromosomes)
 
