@@ -5,9 +5,11 @@
 #include <filesystem>
 #include <iostream>
 #include <queue>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <map>
 
 
 using namespace std;
@@ -16,7 +18,7 @@ using namespace std;
 struct dsb_end {
     int break_index;
     int is_complex;
-    int chromosome_id;
+    //int chromosome_id;
     int dna_structure;
     int chromosome_set;
     int chromatid_strand;
@@ -34,12 +36,465 @@ struct dna_repair_pair {
 
 // Segment representation if you want to keep track of pieces
 struct segment {
+    int id; // unique ID across all segments
     int old_chromosome_id;
     int old_chromatid_strand;
     double old_chromatid_start_position;
     double old_chromatid_end_position;
     int has_centromere;
 };
+
+enum SegmentSide {
+    LEFT = 0,   // at old_chromatid_start_position
+    RIGHT = 1   // at old_chromatid_end_position
+};
+
+struct SegmentSideNode {
+    int segment_id;
+    SegmentSide side;
+
+    bool operator==(const SegmentSideNode& other) const {
+        return segment_id == other.segment_id && side == other.side;
+    }
+};
+
+struct SegmentSideNodeHash {
+    std::size_t operator()(const SegmentSideNode& n) const {
+        std::size_t h1 = std::hash<int>()(n.segment_id);
+        std::size_t h2 = std::hash<int>()(static_cast<int>(n.side));
+        return (h1 ^ (h2 << 1));
+    }
+};
+
+struct StrandSegment {
+    int segment_id;
+    int orientation; // +1: start→end, -1: end→start
+};
+
+struct ChimericStrand {
+    std::vector<StrandSegment> segments;
+    bool is_ring;
+};
+
+
+struct ChromChromatidKey {
+    int chromosome_set;
+    int chromatid_strand;
+
+    bool operator<(const ChromChromatidKey& other) const {
+        if (chromosome_set != other.chromosome_set)
+            return chromosome_set < other.chromosome_set;
+        return chromatid_strand < other.chromatid_strand;
+    }
+};
+
+// Structure to store affected chromosome and chromatid strand combinations
+struct affected_chrom_chromatid {
+    int chromosome_set;
+    int chromatid_strand;
+    
+    affected_chrom_chromatid(int chrom, int strand) 
+        : chromosome_set(chrom), chromatid_strand(strand) {}
+    
+    bool operator<(const affected_chrom_chromatid& other) const {
+        if (chromosome_set != other.chromosome_set) {
+            return chromosome_set < other.chromosome_set;
+        }
+        return chromatid_strand < other.chromatid_strand;
+    }
+    
+    bool operator==(const affected_chrom_chromatid& other) const {
+        return chromosome_set == other.chromosome_set && 
+               chromatid_strand == other.chromatid_strand;
+    }
+};
+
+// Function to get all affected chromosomes and chromatid strands
+std::set<affected_chrom_chromatid> get_affected_chromosomes(
+    const std::vector<dna_repair_pair>& repair_pairs) {
+    
+    std::set<affected_chrom_chromatid> affected;
+    
+    // Iterate through all repair pairs
+    for (const auto& pair : repair_pairs) {
+        // Add chromosome-chromatid combination for end1
+        affected.insert(affected_chrom_chromatid(pair.end1.chromosome_set, pair.end1.chromatid_strand));
+        
+        // Add chromosome-chromatid combination for end2
+        affected.insert(affected_chrom_chromatid(pair.end2.chromosome_set, pair.end2.chromatid_strand));
+    }
+    
+    return affected;
+}
+
+// Function to get all broken segments for a given chromosome-chromatid combination
+std::vector<segment> get_broken_segments(
+    const affected_chrom_chromatid& chr_chromatid,
+    const std::vector<dna_repair_pair>& repair_pairs) {
+    
+    std::vector<segment> segments;
+    std::vector<double> break_positions;
+    
+    // Collect all break positions for this chromosome-chromatid combination
+    for (const auto& pair : repair_pairs) {
+        // Check end1
+        if (pair.end1.chromosome_set == chr_chromatid.chromosome_set &&
+            pair.end1.chromatid_strand == chr_chromatid.chromatid_strand) {
+            break_positions.push_back(pair.end1.position_in_chromosome);
+        }
+        
+        // Check end2
+        if (pair.end2.chromosome_set == chr_chromatid.chromosome_set &&
+            pair.end2.chromatid_strand == chr_chromatid.chromatid_strand) {
+            break_positions.push_back(pair.end2.position_in_chromosome);
+        }
+    }
+    
+    // Sort break positions
+    std::sort(break_positions.begin(), break_positions.end());
+    
+    // Remove duplicates
+    break_positions.erase(std::unique(break_positions.begin(), break_positions.end()), break_positions.end());
+    
+    // Centromere location
+    const double centromere_position = 0.5;
+    
+    // DNA strand spans from 0 to 1
+    double start_pos = 0.0;
+    const double chromosome_end = 1.0;
+    
+    // Create segments between breaks
+    for (size_t i = 0; i < break_positions.size(); ++i) {
+        segment seg;
+        seg.old_chromosome_id = chr_chromatid.chromosome_set;
+        seg.old_chromatid_strand = chr_chromatid.chromatid_strand;
+        seg.old_chromatid_start_position = start_pos;
+        seg.old_chromatid_end_position = break_positions[i];
+        
+        // Check if centromere is in this segment
+        seg.has_centromere = (start_pos <= centromere_position && centromere_position < break_positions[i]) ? 1 : 0;
+        
+        segments.push_back(seg);
+        start_pos = break_positions[i];
+    }
+    
+    // Add final segment from last break to end of chromosome (1.0)
+    if (!break_positions.empty()) {
+        segment final_seg;
+        final_seg.old_chromosome_id = chr_chromatid.chromosome_set;
+        final_seg.old_chromatid_strand = chr_chromatid.chromatid_strand;
+        final_seg.old_chromatid_start_position = break_positions.back();
+        final_seg.old_chromatid_end_position = chromosome_end;
+        
+        // Check if centromere is in this final segment
+        final_seg.has_centromere = (break_positions.back() <= centromere_position && centromere_position < chromosome_end) ? 1 : 0;
+        
+        segments.push_back(final_seg);
+    }
+    
+    return segments;
+}
+
+std::map<ChromChromatidKey, std::vector<segment>>
+build_all_segments(const std::vector<dna_repair_pair>& repair_pairs) {
+    std::map<ChromChromatidKey, std::vector<segment>> segments_by_cc;
+
+    auto affected = get_affected_chromosomes(repair_pairs);
+    int next_id = 0;
+
+    for (const auto& chr_chromatid : affected) {
+        ChromChromatidKey key{chr_chromatid.chromosome_set,
+                              chr_chromatid.chromatid_strand};
+        auto segs = get_broken_segments(chr_chromatid, repair_pairs);
+        for (auto& s : segs) {
+            s.id = next_id++;
+            s.old_chromosome_id = chr_chromatid.chromosome_set;
+            s.old_chromatid_strand = chr_chromatid.chromatid_strand;
+        }
+        segments_by_cc[key] = std::move(segs);
+    }
+
+    return segments_by_cc;
+}
+
+struct SegmentSideKey {
+    int chromosome_set;
+    int chromatid_strand;
+    double position;
+    SegmentSide side;
+
+    bool operator==(const SegmentSideKey& other) const {
+        return chromosome_set == other.chromosome_set &&
+               chromatid_strand == other.chromatid_strand &&
+               position == other.position &&
+               side == other.side;
+    }
+};
+
+struct SegmentSideKeyHash {
+    std::size_t operator()(const SegmentSideKey& k) const {
+        std::size_t h1 = std::hash<int>()(k.chromosome_set);
+        std::size_t h2 = std::hash<int>()(k.chromatid_strand);
+        std::size_t h3 = std::hash<double>()(k.position);
+        std::size_t h4 = std::hash<int>()(static_cast<int>(k.side));
+        return (((h1 ^ (h2 << 1)) >> 1) ^ (h3 << 1)) ^ (h4 << 1);
+    }
+};
+
+std::unordered_map<SegmentSideKey, SegmentSideNode, SegmentSideKeyHash>
+build_segment_side_map(const std::map<ChromChromatidKey, std::vector<segment>>& segments_by_cc) {
+    std::unordered_map<SegmentSideKey, SegmentSideNode, SegmentSideKeyHash> map;
+
+    for (const auto& kv : segments_by_cc) {
+        const auto& key = kv.first;
+        const auto& segs = kv.second;
+
+        for (const auto& s : segs) {
+            // internal break at start (not telomere)
+            if (s.old_chromatid_start_position > 0.0) {
+                SegmentSideKey sk{key.chromosome_set, key.chromatid_strand,
+                                  s.old_chromatid_start_position, LEFT};
+                map[sk] = SegmentSideNode{s.id, LEFT};
+            }
+            // internal break at end (not telomere)
+            if (s.old_chromatid_end_position < 1.0) {
+                SegmentSideKey sk{key.chromosome_set, key.chromatid_strand,
+                                  s.old_chromatid_end_position, RIGHT};
+                map[sk] = SegmentSideNode{s.id, RIGHT};
+            }
+        }
+    }
+
+    return map;
+}
+
+bool map_dsb_end_to_segment_side(
+    const dsb_end& end,
+    const std::unordered_map<SegmentSideKey, SegmentSideNode, SegmentSideKeyHash>& side_map,
+    SegmentSideNode& out_node)
+{
+    // upstream_downstream: -1 = upstream, +1 = downstream
+    // Correct: upstream belongs to the segment ending at this position (RIGHT),
+    //          downstream belongs to the segment starting at this position (LEFT).
+    SegmentSide side = (end.upstream_downstream == -1) ? RIGHT : LEFT;
+
+    SegmentSideKey key{
+        end.chromosome_set,
+        end.chromatid_strand,
+        end.position_in_chromosome,
+        side
+    };
+
+    auto it = side_map.find(key);
+    if (it == side_map.end()) return false;
+    out_node = it->second;
+    return true;
+}
+
+
+using AdjacencyMap = std::unordered_map<SegmentSideNode, SegmentSideNode, SegmentSideNodeHash>;
+
+AdjacencyMap build_adjacency(
+    const std::vector<dna_repair_pair>& repair_pairs,
+    const std::unordered_map<SegmentSideKey, SegmentSideNode, SegmentSideKeyHash>& side_map)
+{
+    AdjacencyMap adj;
+
+    for (const auto& pair : repair_pairs) {
+        SegmentSideNode n1, n2;
+        if (!map_dsb_end_to_segment_side(pair.end1, side_map, n1)) continue;
+        if (!map_dsb_end_to_segment_side(pair.end2, side_map, n2)) continue;
+
+        adj[n1] = n2;
+        adj[n2] = n1;
+    }
+
+    return adj;
+}
+
+SegmentSide opposite_side(SegmentSide s) {
+    return (s == LEFT) ? RIGHT : LEFT;
+}
+
+std::vector<ChimericStrand> build_chimeric_strands(
+    const std::map<ChromChromatidKey, std::vector<segment>>& segments_by_cc,
+    const AdjacencyMap& adj)
+{
+    std::vector<ChimericStrand> strands;
+
+    // 1) segment_id -> segment
+    std::unordered_map<int, segment> seg_by_id;
+    for (const auto& kv : segments_by_cc)
+        for (const auto& s : kv.second)
+            seg_by_id[s.id] = s;
+
+    // 2) Build side-level adjacency: SegmentSideNode -> neighbors
+    std::unordered_map<SegmentSideNode,
+                       std::vector<SegmentSideNode>,
+                       SegmentSideNodeHash> side_adj;
+
+    // 2a) Intrinsic edges: LEFT <-> RIGHT for each segment
+    for (const auto& kv : seg_by_id) {
+        int sid = kv.first;
+        SegmentSideNode L{sid, LEFT};
+        SegmentSideNode R{sid, RIGHT};
+
+        side_adj[L].push_back(R);
+        side_adj[R].push_back(L);
+    }
+
+    // 2b) Repair edges from adj (already symmetric, but treat as undirected)
+    for (const auto& kv : adj) {
+        const SegmentSideNode& a = kv.first;
+        const SegmentSideNode& b = kv.second;
+
+        side_adj[a].push_back(b);
+        side_adj[b].push_back(a);
+    }
+
+    // 3) Connected components on side graph
+    std::unordered_set<SegmentSideNode, SegmentSideNodeHash> visited_side;
+
+    for (const auto& kv : side_adj) {
+        SegmentSideNode start_node = kv.first;
+        if (visited_side.count(start_node)) continue;
+
+        // 3a) Collect all nodes in this component
+        std::vector<SegmentSideNode> comp_nodes;
+        std::queue<SegmentSideNode> q;
+        q.push(start_node);
+        visited_side.insert(start_node);
+
+        while (!q.empty()) {
+            SegmentSideNode cur = q.front(); q.pop();
+            comp_nodes.push_back(cur);
+
+            auto it = side_adj.find(cur);
+            if (it == side_adj.end()) continue;
+
+            for (const auto& nb : it->second) {
+                if (!visited_side.count(nb)) {
+                    visited_side.insert(nb);
+                    q.push(nb);
+                }
+            }
+        }
+
+        // 3b) Compute degree of each node in this component
+        std::unordered_map<SegmentSideNode, int, SegmentSideNodeHash> degree;
+        for (const auto& n : comp_nodes) {
+            auto it = side_adj.find(n);
+            int d = 0;
+            if (it != side_adj.end())
+                d = (int)it->second.size();
+            degree[n] = d;
+        }
+
+        // 3c) Find endpoints (degree 1 nodes)
+        std::vector<SegmentSideNode> endpoints;
+        for (const auto& n : comp_nodes) {
+            if (degree[n] == 1)
+                endpoints.push_back(n);
+        }
+
+        bool is_ring = false;
+        bool is_linear = false;
+
+        if (endpoints.empty()) {
+            // No endpoints -> ring (or closed structure)
+            is_ring = true;
+        } else if (endpoints.size() == 2) {
+            // Two endpoints -> linear
+            is_linear = true;
+        }
+
+        // 3d) Choose a start node
+        SegmentSideNode walk_start;
+        if (is_linear) {
+            // Start from one endpoint
+            walk_start = endpoints[0];
+        } else {
+            // Ring or complex: start anywhere
+            walk_start = comp_nodes[0];
+        }
+
+        // 4) Walk the component in order, building an ordered list of segments
+        std::vector<int> ordered_segments;
+        std::unordered_set<SegmentSideNode, SegmentSideNodeHash> used_in_walk;
+
+        SegmentSideNode current = walk_start;
+        SegmentSideNode prev = current; // dummy init
+
+        bool first_step = true;
+
+        while (true) {
+            // Record segment when we first encounter it or when it changes
+            if (ordered_segments.empty() ||
+                ordered_segments.back() != current.segment_id) {
+                ordered_segments.push_back(current.segment_id);
+            }
+
+            used_in_walk.insert(current);
+
+            // Find next neighbor to move to
+            auto it = side_adj.find(current);
+            if (it == side_adj.end()) break;
+
+            SegmentSideNode next;
+            bool found_next = false;
+
+            for (const auto& nb : it->second) {
+                if (first_step) {
+                    // On first step, just pick any neighbor
+                    next = nb;
+                    found_next = true;
+                    break;
+                } else {
+                    // Avoid going straight back to previous node
+                    if (!(nb.segment_id == prev.segment_id && nb.side == prev.side)) {
+                        next = nb;
+                        found_next = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!found_next) break;
+
+            prev = current;
+            current = next;
+            first_step = false;
+
+            // For rings: stop when we return to the start node
+            if (is_ring && current.segment_id == walk_start.segment_id &&
+                current.side == walk_start.side) {
+                break;
+            }
+
+            // For linears: stop when we hit an endpoint with no new neighbor
+            if (is_linear && degree[current] == 1) {
+                // We'll add its segment on next loop iteration if needed
+                if (ordered_segments.empty() ||
+                    ordered_segments.back() != current.segment_id) {
+                    ordered_segments.push_back(current.segment_id);
+                }
+                break;
+            }
+        }
+
+        // 5) Build the ChimericStrand for this component
+        ChimericStrand strand;
+        strand.is_ring = is_ring;
+
+        for (int sid : ordered_segments) {
+            strand.segments.push_back(StrandSegment{sid, +1}); // orientation placeholder
+        }
+
+        strands.push_back(std::move(strand));
+    }
+
+    return strands;
+}
 
 
 // Class to represent repaired chromosome geometry
@@ -63,9 +518,44 @@ public:
 };
 
 
-// Helper prototype -- defined below
+// Structure to store DSB end index mapping and pairing information
+struct dsb_end_pairing {
+    int dsb_end_index;       // Global index for this DSB end
+    int paired_with_index;   // Index of the DSB end it's paired with
+    int inter_chrom;         // 0 or 1: whether pairing is inter-chromosomal
+    dsb_end_pairing(int idx, int paired, int inter) 
+        : dsb_end_index(idx), paired_with_index(paired), inter_chrom(inter) {}
+};
 
-dsb_end parse_dsb_end(const std::string& end_str);
+
+
+// Function to index all DSB ends and return their pairings
+std::vector<dsb_end_pairing> index_dsb_ends_and_pairings(
+    const std::vector<dna_repair_pair>& repair_pairs) {
+    
+    std::vector<dsb_end_pairing> pairings;
+    int global_index = 0;
+    
+    // Iterate through all repair pairs
+    for (size_t i = 0; i < repair_pairs.size(); ++i) {
+        const auto& pair = repair_pairs[i];
+        
+        // Index for end1
+        int end1_index = global_index++;
+        // Index for end2
+        int end2_index = global_index++;
+        
+        // Record the pairing: end1 paired with end2
+        pairings.push_back(dsb_end_pairing(end1_index, end2_index, pair.inter_chrom));
+        pairings.push_back(dsb_end_pairing(end2_index, end1_index, pair.inter_chrom));
+    }
+    
+    return pairings;
+}
+
+
+
+
 
 // -----------------------------------------------------------------------------
 // Implementation of helper and class methods
@@ -246,7 +736,7 @@ void repaired_chromosome::parse_cell_data(const std::string& cell_data) {
 
 
 
-int main() {
+int main_hold() {
     // Load cells from the sample file
     filesystem::path sample = "examplesdd.joinedpairs";
     if (!filesystem::exists(sample)) {
@@ -277,7 +767,87 @@ int main() {
         cout << "Viability: " << geom.viability << endl;
         cout << "Repair Pairs: " << geom.repair_pairs.size() << endl;
 
+        // Index DSB ends and get pairing information
+        auto dsb_pairings = index_dsb_ends_and_pairings(geom.repair_pairs);
+        cout << "\nDSB End Pairings:" << endl;
+        for (const auto& pairing : dsb_pairings) {
+            // Determine which repair pair and which end this index corresponds to
+            int pair_index = pairing.dsb_end_index / 2;
+            int end_in_pair = pairing.dsb_end_index % 2;  // 0 for end1, 1 for end2
+            
+            const dsb_end& current_end = (end_in_pair == 0) 
+                ? geom.repair_pairs[pair_index].end1 
+                : geom.repair_pairs[pair_index].end2;
+            
+            // Determine the paired end
+            int paired_pair_index = pairing.paired_with_index / 2;
+            int paired_end_in_pair = pairing.paired_with_index % 2;
+            
+            const dsb_end& paired_end = (paired_end_in_pair == 0) 
+                ? geom.repair_pairs[paired_pair_index].end1 
+                : geom.repair_pairs[paired_pair_index].end2;
+            
+            cout << "  DSB End Index " << pairing.dsb_end_index 
+                 << " (Chr: " << current_end.chromosome_set 
+                 << ", Pos: " << current_end.position_in_chromosome
+                 << ", Up/Down: " << current_end.upstream_downstream << ")"
+                 << " is paired with Index " << pairing.paired_with_index
+                 << " (Chr: " << paired_end.chromosome_set
+                 << ", Pos: " << paired_end.position_in_chromosome
+                 << ", Up/Down: " << paired_end.upstream_downstream << ")"
+                 << " (Inter-chrom: " << pairing.inter_chrom << ")" << endl;
+        }
+
+        // Get affected chromosomes and chromatids
+        auto affected = get_affected_chromosomes(geom.repair_pairs);
+        cout << "\nAffected Chromosomes and Chromatid Strands:" << endl;
+        for (const auto& chr_chromatid : affected) {
+            cout << "  Chromosome " << chr_chromatid.chromosome_set 
+                 << ", Chromatid Strand " << chr_chromatid.chromatid_strand << endl;
+            
+            // Get broken segments for this chromosome-chromatid combination
+            auto broken_segs = get_broken_segments(chr_chromatid, geom.repair_pairs);
+            cout << "    Broken Segments:" << endl;
+            for (size_t k = 0; k < broken_segs.size(); ++k) {
+                cout << "      Segment " << (k + 1) << ": [" 
+                     << broken_segs[k].old_chromatid_start_position << ", "
+                     << broken_segs[k].old_chromatid_end_position << "] "
+                     << "(Centromere: " << broken_segs[k].has_centromere << ")" << endl;
+            }
+        }
+
+        auto segments_by_cc = build_all_segments(geom.repair_pairs);
+        auto side_map       = build_segment_side_map(segments_by_cc);
+        auto adj            = build_adjacency(geom.repair_pairs, side_map);
+        auto strands        = build_chimeric_strands(segments_by_cc, adj);
+
+        cout << "\nChimeric strands:\n";
+
+        for (size_t s = 0; s < strands.size(); ++s) {
+            const auto& strand = strands[s];
+            cout << "  Strand " << s + 1 << " (" << (strand.is_ring ? "ring" : "linear") << "):\n";
+
+            // rebuild seg_by_id for printing
+            std::unordered_map<int, segment> seg_by_id;
+            for (const auto& kv : segments_by_cc)
+                for (const auto& seg : kv.second)
+                    seg_by_id[seg.id] = seg;
+
+            for (const auto& seg_inst : strand.segments) {
+                const auto& seg = seg_by_id[seg_inst.segment_id];
+                cout << "    SegID " << seg.id
+                    << " Chr " << seg.old_chromosome_id
+                    << " Strand " << seg.old_chromatid_strand
+                    << " [" << seg.old_chromatid_start_position
+                    << ", " << seg.old_chromatid_end_position << "]"
+                    << " Centromere " << seg.has_centromere
+                    << " Orientation " << (seg_inst.orientation > 0 ? "+" : "-")
+                    << "\n";
+            }
+        }
+
         // Print repair pairs
+        /*
         for (size_t j = 0; j < geom.repair_pairs.size(); ++j) {
             cout << "  Pair " << (j + 1) << ":" << endl;
             cout << "    Inter-Chromosome: " << geom.repair_pairs[j].inter_chrom << endl;
@@ -299,9 +869,116 @@ int main() {
             cout << "      Chromosome Arm: " << geom.repair_pairs[j].end2.chromosome_arm << endl;
             cout << "      Position in Chromosome: " << geom.repair_pairs[j].end2.position_in_chromosome << endl;
             cout << "      Upstream/Downstream: " << geom.repair_pairs[j].end2.upstream_downstream << endl;
-        }
+        }*/
+
         cout << "------------------------------" << endl;
     }
+
+    return 0;
+}
+
+
+
+
+int main() {
+    cout << "=== Synthetic Multi‑Segment Ring Test (correct biological wiring) ===\n";
+
+    // Define breakpoints
+    std::vector<double> bp = {0.10, 0.25, 0.40, 0.55, 0.70, 0.85, 0.95};
+
+    // Build dummy pairs so segmentation works
+    std::vector<dna_repair_pair> dummy_pairs;
+    for (double p : bp) {
+        dna_repair_pair d{};
+        d.inter_chrom = 0;
+        d.end1 = dsb_end{};
+        d.end2 = dsb_end{};
+        d.end1.chromosome_set = 1;
+        d.end1.chromatid_strand = 1;
+        d.end1.position_in_chromosome = p;
+        d.end2 = d.end1;
+        dummy_pairs.push_back(d);
+    }
+
+    auto segments_by_cc = build_all_segments(dummy_pairs);
+    ChromChromatidKey key{1,1};
+    auto& segs = segments_by_cc[key];
+
+    cout << "\nSegments on Chr1:\n";
+    for (const auto& s : segs)
+        cout << "  SegID " << s.id << " [" << s.old_chromatid_start_position
+             << ", " << s.old_chromatid_end_position << "]\n";
+
+    // Helper to build ends
+    auto make_end = [](int idx, double pos, int updown) {
+        dsb_end e{};
+        e.break_index = idx;
+        e.chromosome_set = 1;
+        e.chromatid_strand = 1;
+        e.position_in_chromosome = pos;
+        e.upstream_downstream = updown;
+        return e;
+    };
+
+    auto left_pos  = [&](int id){ return segs[id].old_chromatid_start_position; };
+    auto right_pos = [&](int id){ return segs[id].old_chromatid_end_position; };
+
+    std::vector<dna_repair_pair> repair_pairs;
+    int idx = 0;
+
+    // Build ring among Seg1..Seg6
+    std::vector<int> ring = {1,2,3,4,5,6};
+    for (int i = 0; i < (int)ring.size(); i++) {
+        int a = ring[i];
+        int b = ring[(i+1) % ring.size()];
+
+        dna_repair_pair p;
+        p.inter_chrom = 0;
+        p.end1 = make_end(idx++, right_pos(a), -1); // upstream
+        p.end2 = make_end(idx++, left_pos(b),  +1); // downstream
+        repair_pairs.push_back(p);
+    }
+
+    // Join telomeres: RIGHT(Seg0) → LEFT(Seg7)
+    {
+        dna_repair_pair p;
+        p.inter_chrom = 0;
+        p.end1 = make_end(idx++, right_pos(0), -1);
+        p.end2 = make_end(idx++, left_pos(7),  +1);
+        repair_pairs.push_back(p);
+    }
+
+    // Build adjacency and strands
+    auto segs2 = build_all_segments(repair_pairs);
+    auto side_map = build_segment_side_map(segs2);
+    auto adj = build_adjacency(repair_pairs, side_map);
+    auto strands = build_chimeric_strands(segs2, adj);
+
+    cout << "\nChimeric strands:\n";
+
+    std::unordered_map<int, segment> seg_by_id;
+    for (const auto& kv : segs2)
+        for (const auto& s : kv.second)
+            seg_by_id[s.id] = s;
+
+    for (size_t s = 0; s < strands.size(); ++s) {
+        const auto& strand = strands[s];
+        cout << "  Strand " << s+1 << " (" << (strand.is_ring ? "ring" : "linear") << "):\n";
+        for (const auto& seg_inst : strand.segments) {
+            const auto& seg = seg_by_id[seg_inst.segment_id];
+            cout << "    SegID " << seg.id
+                 << " [" << seg.old_chromatid_start_position
+                 << ", " << seg.old_chromatid_end_position << "]\n";
+        }
+    }
+
+    for (auto& kv : adj) {
+        auto a = kv.first;
+        auto b = kv.second;
+        std::cout << "Adj: Seg" << a.segment_id << "." << (a.side==LEFT?"L":"R")
+                << " -> Seg" << b.segment_id << "." << (b.side==LEFT?"L":"R") << "\n";
+    }
+
 
     return 0;
 }
