@@ -88,15 +88,15 @@ def pickRepair(interactionArray,n):
 
 def singleRepair(filename, breakList,rateTable,sigma=None, finalTime = np.inf):
 
-    outfilename = str(filename.split(".")[0]) + ".txtn"
+    outfilename = str(filename.split(".")[0]) + ".joinedpairs"
     #with open("my_new_file.txtn", "w") as file:
-    with open(outfilename, "w") as file:
+    with open(outfilename, "a") as file:
 
         #write all the breaks to file
         printBreak = copy.deepcopy(breakList)
-        for ind in printBreak:
-            file.write(str(ind) + "\n")
-        file.write("------------------------------" + "\n")
+        # for ind in printBreak:
+        #     file.write(str(ind) + "\n")
+        # file.write("------------------------------" + "\n")
 
         # Sort breaks by order of creation in time and set up interaction rates if needed
         if rateTable is None: 
@@ -237,6 +237,7 @@ def singleRepair(filename, breakList,rateTable,sigma=None, finalTime = np.inf):
         #     file.write("repaired time, chromosome end 1, end 2, complexity. note the 2nd and 3rd entry is the break end's index, so a 44 here means its from the 22nd break pair" + "\n")
         #     for ind in repairEvents:
         #         file.write(str(ind) + "\n")
+        file.write("------------------------------" + "\n")
 
         return misrepairedPairs, repairEvents, []
 

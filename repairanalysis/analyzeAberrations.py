@@ -358,6 +358,50 @@ def doRepair(chromosomes, repairs, remBreaks=None, index=0, breaks=-1, baseBreak
 		
 	print()
 
+
+	
+	# ---------------------------------------------------------
+	# OUTPUT: Pre-repair segments, repair joins, final strands
+	# ---------------------------------------------------------
+
+	print("=== PRE-REPAIR SEGMENTS ===")
+	for chrom in chromFrags:
+		for seg in chrom:
+			chromID, start, end, spatialStart, spatialEnd = seg
+			hasCent = 1 if (start <= 0.5*chromosomes[chromID][2] <= end) else 0
+			print(f"SEG {chromID} {start} {end} {hasCent}")
+
+	print("=== REPAIR JOINS ===")
+	for b1, b2 in repairs:
+		c1, p1, d1, _ = b1
+		c2, p2, d2, _ = b2
+		print(f"JOIN {c1} {p1} {d1}  {c2} {p2} {d2}")
+
+	print("=== FINAL CHIMERIC STRANDS ===")
+	strandID = 0
+
+	# Linear chromosomes
+	for chrom in chromList:
+		print(f"STRAND {strandID} LINEAR")
+		for seg in chrom:
+			chromID, start, end, _, _ = seg
+			hasCent = 1 if (start <= 0.5*chromosomes[chromID][2] <= end) or (end <= 0.5*chromosomes[chromID][2] <= start) else 0
+			print(f"  SEG {chromID} {start} {end} {hasCent}")
+		strandID += 1
+
+	# Ring chromosomes
+	for chrom in rings:
+		print(f"STRAND {strandID} RING")
+		for seg in chrom:
+			chromID, start, end, _, _ = seg
+			hasCent = 1 if (start <= 0.5*chromosomes[chromID][2] <= end) or (end <= 0.5*chromosomes[chromID][2] <= start) else 0
+			print(f"  SEG {chromID} {start} {end} {hasCent}")
+		strandID += 1
+
+	# print("=== LOST FRAGMENTS ===")
+	# for lost_frag in lostFragments:
+	# 	print(f"LOST {lost_frag}")
+
 	return chromList, rings, lostFragments
 
 #######################################################
