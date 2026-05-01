@@ -129,7 +129,6 @@ class SDRwriter:
                 f.write(line.write_data_line() + "\n")
 
 
-
 def import_strands(repair_results):
     strands = []
     cell_id = 0
@@ -167,8 +166,15 @@ def import_strands(repair_results):
         cell_id += 1
     return strands, intact_strands_ID
 
-def medras_bridge_working(repair_results, imported_header, sddFileName):
+
+# the final function to be called by medras
+def medras_bridge_working(repair_results, imported_header, sddFileName, captured_logs):
     
+    # medras default output:
+    first_log_fields = captured_logs[0].split()
+    log_first_line_cleaned = " ".join(first_log_fields[18:])
+    new_captured_logs = [log_first_line_cleaned] + captured_logs[1:]
+
     # declare classes
     sdr_header = Header()
     SDR = SDRwriter(sddFileName)
@@ -183,25 +189,36 @@ def medras_bridge_working(repair_results, imported_header, sddFileName):
     sdr_header.add_intact_strands_ID(intact_strands_ID)
 
     #WIP
+    # these fields are different per cell. think of a way to represent these per cell
     sdr_header.add_new_chromosome_sizes()
     sdr_header.add_number_of_misrepairs()
     sdr_header.add_number_of_inter_chromosome_misrepairs()
 
-        
 
-
-        
-
-
-
-
-def medras_bridge_tests(repair_results, imported_header, sddFileName):
+# use this one for tests
+def medras_bridge(repair_results, imported_header, sddFileName, captured_logs):
     # ---------------------------------------------------------
     # OUTPUT: Pre-repair segments, repair joins, final strands
     # ---------------------------------------------------------
     print_results = False
     print_header = False
-    print_filename = True
+    print_filename = False
+    print_captured_logs = True
+
+    # 1. Take the first log and split it into a list of words
+    first_log_fields = captured_logs[0].split()
+
+    # 2. Keep only the data (everything after the 18th word)
+    # Then join it back into a string so it matches the format of the other logs
+    log_first_line_cleaned = " ".join(first_log_fields[18:])
+
+    # 3. Create the new list with the cleaned first line
+    new_captured_logs = [log_first_line_cleaned] + captured_logs[1:]
+
+    if print_captured_logs:
+        for i, log in enumerate(new_captured_logs):
+            print(f"--- Captured Log for Cell {i} ---")
+            print(log.split())
 
     if print_filename:
         print(sddFileName)

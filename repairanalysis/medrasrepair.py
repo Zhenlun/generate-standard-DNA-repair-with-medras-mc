@@ -42,7 +42,9 @@ from . import medrasparser
 from . import misrepaircalculator as calcMR 
 from . import analyzeAberrations
 from . import standardDnaRepair
-#from contextlib import redirect_stdout
+
+import io
+from contextlib import redirect_stdout
 
 # Input parameters common to different processes
 sigma = 0.04187 # Misrepair range, as fraction of nuclear radius
@@ -172,6 +174,7 @@ def misrepairSpectrum_withoutput(fileData, header, fileName):
 
 	#-----added-----
 	repair_result = []
+	captured_logs = [] 
 	#-----added-----
 
 	for m,breakList in enumerate(allBreaks):
@@ -181,12 +184,16 @@ def misrepairSpectrum_withoutput(fileData, header, fileName):
 															scaledSigma, finalTime = simulationLimit)
 		trimMisrep, trimRemBreaks = prepareDamage(misrepList, remBreaks, baseChromosomes)
 
-		chroms, rings, frags = analyzeAberrations.doRepair(baseChromosomes, trimMisrep, 
-			                        remBreaks = trimRemBreaks, index=m, breaks=len(breakList)//2, 
-			                        baseBreaks=breakList, plot = doPlot, allFragments=allFragments, 
-			                        outFile = fileName+str(m)+'.png')
-
 		#-----added-----
+		# this part is needed to get the default repair statistics printed to the console
+		f = io.StringIO()
+		with redirect_stdout(f):
+			#added tab
+			chroms, rings, frags = analyzeAberrations.doRepair(baseChromosomes, trimMisrep, 
+										remBreaks = trimRemBreaks, index=m, breaks=len(breakList)//2, 
+										baseBreaks=breakList, plot = doPlot, allFragments=allFragments, 
+										outFile = fileName+str(m)+'.png')
+		captured_logs.append(f.getvalue())
 		repair_result.append([baseChromosomes, chroms, rings])
 		#-----added-----
 
@@ -198,7 +205,7 @@ def misrepairSpectrum_withoutput(fileData, header, fileName):
 		listAcentricSizes(baseChromosomes, allChroms+allRings)
 
 	#-----changed-----
-	return repair_result
+	return repair_result, captured_logs
 	#return None
 	#-----changed------
 
@@ -460,8 +467,8 @@ def trackBreaks(fileData,header,fileName):
 
 
 def postRepairDNA(fileData, header, fileName):
-	repair_results = misrepairSpectrum_withoutput(fileData, header, fileName)
-	standardDnaRepair.medras_bridge(repair_results, header, fileName)
+	repair_results, captured_logs = misrepairSpectrum_withoutput(fileData, header, fileName)
+	standardDnaRepair.medras_bridge(repair_results, header, fileName, captured_logs)
 	return None
 
 ###################
