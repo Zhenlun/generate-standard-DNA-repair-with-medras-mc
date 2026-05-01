@@ -282,7 +282,6 @@ def doRepair(chromosomes, repairs, remBreaks=None, index=0, breaks=-1, baseBreak
 		print(chromosomes,repairs, remBreaks,index, breaks, baseBreaks, plot, allFragments, inFile, outFile, '', sep='\n')
 		print(ve)
 		exit()
-
 	chromFrags = splitChromosomes(chromosomes,breakList)
 	chromList = copy.deepcopy(chromFrags)
 	rings = []
@@ -356,7 +355,7 @@ def doRepair(chromosomes, repairs, remBreaks=None, index=0, breaks=-1, baseBreak
 		print(fragmentDistribution(chromosomes,baseBreaks),'\t',lostDNA, end='\t\t')
 		if allFragments: 
 			print('\t','\t'.join(map(str,sorted(lostFragments))),end='\t\t')
-			
+		
 	print()
 
 	return chromList, rings, lostFragments

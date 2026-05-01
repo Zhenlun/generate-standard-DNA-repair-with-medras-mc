@@ -41,8 +41,6 @@ import copy
 from . import medrasparser
 from . import misrepaircalculator as calcMR 
 from . import analyzeAberrations
-from . import standardDnaRepair
-#from contextlib import redirect_stdout
 
 # Input parameters common to different processes
 sigma = 0.04187 # Misrepair range, as fraction of nuclear radius
@@ -105,51 +103,7 @@ def listAcentricSizes(baseChromosomes, finalChromosomes,pos=0.5):
 			theSize = sum( abs(f[1]-f[2]) for f in c[3])
 			print(theSize)
 
-
 def misrepairSpectrum(fileData, header, fileName):
-	allBreaks, scaledSigma, meanE, complexity, complexitySd, dose, emptySets = fileData
-	radius = scaledSigma/sigma
-
-	print('Data for: '+fileName)
-	if len(allBreaks)==0:
-		print('No damage in file')
-		return None
-
-	# Test to see if chromosome ID data is available, abort if not
-	firstBreak = allBreaks[0][0]
-	if firstBreak[3][0]==-1:
-		print('No chromosome IDs found in data file, aborting!')
-		return None
-
-	noChroms = header['Chromosomes'][0]
-	chromSizes = header['Chromosomes'][1]
-	baseChromosomes = [[n,0,header['Chromosomes'][1][n] ] for n in range(noChroms) ]
-	fullFrags = []
-	allChroms = []
-	allRings = []
-	for m,breakList in enumerate(allBreaks):
-		if m>=maxExposures:
-			break
-		misrepList,repList, remBreaks = calcMR.singleRepair(fileName, copy.deepcopy(breakList), None, 
-															scaledSigma, finalTime = simulationLimit)
-		trimMisrep, trimRemBreaks = prepareDamage(misrepList, remBreaks, baseChromosomes)
-
-		chroms, rings, frags = analyzeAberrations.doRepair(baseChromosomes, trimMisrep, 
-			                        remBreaks = trimRemBreaks, index=m, breaks=len(breakList)//2, 
-			                        baseBreaks=breakList, plot = doPlot, allFragments=allFragments, 
-			                        outFile = fileName+str(m)+'.png')
-
-		frags = [f+[m] for f in frags]
-		fullFrags += frags
-		allChroms = allChroms + chroms 
-		allRings = allRings + rings 
-	if listAcentrics:
-		listAcentricSizes(baseChromosomes, allChroms+allRings)
-
-	return None
-
-
-def misrepairSpectrum_withoutput(fileData, header, fileName):
 	allBreaks, scaledSigma, meanE, complexity, complexitySd, dose, emptySets = fileData
 	radius = scaledSigma/sigma
 
@@ -458,12 +412,6 @@ def trackBreaks(fileData,header,fileName):
 	retString = "\t".join(map(str,[fileName,totalTracks,totalBreaks,totalBreaks/totalTracks]))
 	return retString
 
-
-def postRepairDNA(fileData, header, fileName):
-	repair_results = misrepairSpectrum_withoutput(fileData, header, fileName)
-	standardDnaRepair.medras_bridge(repair_results, header, fileName)
-	return None
-
 ###################
 #
 # Simulation wrapper
@@ -475,8 +423,7 @@ def repairSimulation(folder, analysisFunction='Fidelity', verbose=False):
 				  ['Spectrum',  misrepairSpectrum],
 				  ['DSBSeparation',dsbSeparation],
 				  ['DSBRadial',    radialDSBs],
-				  ['TrackBreaks',  trackBreaks],
-				  ['postRepairDNA',  postRepairDNA] ]
+				  ['TrackBreaks',  trackBreaks] ]
 	summaries=[]
 	timeSummary = []
 
@@ -496,7 +443,43 @@ def repairSimulation(folder, analysisFunction='Fidelity', verbose=False):
 
 		# Find matching method and run
 		for name, func in functions:
-			if analysisFunction == name:
+
+			#----- added -----
+			if analysisFunction == name and analysisFunction == 'Spectrum':
+				repair_results = func(fileData[:-1], header, fileName)
+				# original behaviour
+				summaries.append(None)
+				
+				# ---------------------------------------------------------
+				# OUTPUT: Pre-repair segments, repair joins, final strands
+				# ---------------------------------------------------------
+				for res in repair_results:
+					chromosomes, linearchrom, ringchrom = res
+					strandID = 0
+					# Linear chromosomes
+					for chrom in linearchrom:
+						print(f"STRAND {strandID} LINEAR")
+						for seg in chrom:
+							chromID, start, end, _, _ = seg
+							hasCent = 1 if (start <= 0.5*chromosomes[chromID][2] <= end) or (end <= 0.5*chromosomes[chromID][2] <= start) else 0
+							print(f"  SEG {chromID} {start} {end} {hasCent}")
+						strandID += 1
+
+					# Ring chromosomes
+					for chrom in ringchrom:
+						print(f"STRAND {strandID} RING")
+						for seg in chrom:
+							chromID, start, end, _, _ = seg
+							hasCent = 1 if (start <= 0.5*chromosomes[chromID][2] <= end) or (end <= 0.5*chromosomes[chromID][2] <= start) else 0
+							print(f"  SEG {chromID} {start} {end} {hasCent}")
+						strandID += 1
+
+			#----- added -----
+
+			#----- changed -----
+			elif analysisFunction == name:
+			#if analysisFunction == name:
+			#----- changed -----
 				summaries.append(func(fileData[:-1], header, fileName))
 
 		if len(summaries)==0:
