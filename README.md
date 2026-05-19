@@ -1,10 +1,21 @@
 # generate-post-repair-genome-with-medras-mc
 
-aims to output a file containing:
-- all the DSB ends before any repair
-- DSB ends that werent joined with their original ends and their index
-- associated Medras-MC misrepair spectrum information
+This repo builds on top of Medras-MC to output a Standard DNA Repair (SDR) file.
 
-2025-10-21: now does the first 2 points
+The SDR file contains information on the repaired genome. For more details, see this proposal: https://www.overleaf.com/read/szzqsthxtjpq#1d4e64
 
-2025-10-22: added misrepairSpectrum output into the file. the code now only works with misrepairSpectrum function and 1 cell inside an SDD file. (if multiple cells in a SDD, only the output of the last one will remain due to file writing mode)
+The SDR file is meant as an input to RadiSeq sequencing simulator, aiming to detect post-repair DNA structural variants after sequencing.
+
+Functions modified in Medras-MC are:
+  - medrasrepair.misrepairSpectrum_withoutput() as a drop in replacement of misrepairSpectrum()
+  - The simulation wrapper medrasrepair.repairSimulation() to add functionality to output the SDR file.
+
+Functions added are:
+  - medrasrepair.postRepairDNA()
+  - The entire standardDnaRepair file.
+
+To output an SDR file, use medrasrepair.repairSimulation() with analysisFunction="postRepairDNA".
+
+to be done:
+  - As of now, SDR file is still in development. Functions and entries will change.
+  - The SDR addon isnt complete.
