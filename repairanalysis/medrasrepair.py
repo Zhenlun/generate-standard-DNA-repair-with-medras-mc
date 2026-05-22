@@ -150,8 +150,141 @@ def misrepairSpectrum(fileData, header, fileName):
 
 	return None
 
+#perfer this one
+def misrepairSpectrum_return_output_1(fileData, header, fileName, capture_output=False):
+    allBreaks, scaledSigma, meanE, complexity, complexitySd, dose, emptySets = fileData
+    radius = scaledSigma/sigma
 
-def misrepairSpectrum_withoutput(fileData, header, fileName):
+    print('Data for: '+fileName)
+    if len(allBreaks)==0:
+        print('No damage in file')
+        return None
+
+    firstBreak = allBreaks[0][0]
+    if firstBreak[3][0] == -1:
+        print('No chromosome IDs found in data file, aborting!')
+        return None
+
+    noChroms = header['Chromosomes'][0]
+    baseChromosomes = [[n,0,header['Chromosomes'][1][n]] for n in range(noChroms)]
+
+    fullFrags = []
+    allChroms = []
+    allRings = []
+
+    repair_result = []
+    captured_logs = []
+
+    for m, breakList in enumerate(allBreaks):
+        if m >= maxExposures:
+            break
+
+        misrepList, repList, remBreaks = calcMR.singleRepair(
+            fileName, copy.deepcopy(breakList), None,
+            scaledSigma, finalTime=simulationLimit
+        )
+        trimMisrep, trimRemBreaks = prepareDamage(misrepList, remBreaks, baseChromosomes)
+
+        # --- only difference is here ---
+        (chroms, rings, frags), log = capture_stdout(
+            analyzeAberrations.doRepair,
+            baseChromosomes, trimMisrep,
+            remBreaks=trimRemBreaks, index=m,
+            breaks=len(breakList)//2, baseBreaks=breakList,
+            plot=doPlot, allFragments=allFragments,
+            outFile=fileName+str(m)+'.png',
+            enable=capture_output
+        )
+
+        if capture_output:
+            repair_result.append([baseChromosomes, chroms, rings])
+            captured_logs.append(log)
+
+        frags = [f+[m] for f in frags]
+        fullFrags += frags
+        allChroms += chroms
+        allRings += rings
+
+    if listAcentrics:
+        listAcentricSizes(baseChromosomes, allChroms + allRings)
+
+    if capture_output:
+        return repair_result, captured_logs
+
+    return None
+
+
+def misrepairSpectrum_return_output_2(fileData, header, fileName, return_output=False):
+    allBreaks, scaledSigma, meanE, complexity, complexitySd, dose, emptySets = fileData
+    radius = scaledSigma/sigma
+
+    print('Data for: '+fileName)
+    if len(allBreaks)==0:
+        print('No damage in file')
+        return None
+
+    firstBreak = allBreaks[0][0]
+    if firstBreak[3][0] == -1:
+        print('No chromosome IDs found in data file, aborting!')
+        return None
+
+    noChroms = header['Chromosomes'][0]
+    baseChromosomes = [[n,0,header['Chromosomes'][1][n]] for n in range(noChroms)]
+    fullFrags = []
+    allChroms = []
+    allRings = []
+
+    # Only used if return_output=True
+    repair_result = []
+    captured_logs = []
+
+    for m, breakList in enumerate(allBreaks):
+        if m >= maxExposures:
+            break
+
+        misrepList, repList, remBreaks = calcMR.singleRepair(
+            fileName, copy.deepcopy(breakList), None,
+            scaledSigma, finalTime=simulationLimit
+        )
+        trimMisrep, trimRemBreaks = prepareDamage(misrepList, remBreaks, baseChromosomes)
+
+        # --- unified logic ---
+        if return_output:
+            f = io.StringIO()
+            with redirect_stdout(f):
+                chroms, rings, frags = analyzeAberrations.doRepair(
+                    baseChromosomes, trimMisrep,
+                    remBreaks=trimRemBreaks, index=m,
+                    breaks=len(breakList)//2, baseBreaks=breakList,
+                    plot=doPlot, allFragments=allFragments,
+                    outFile=fileName+str(m)+'.png'
+                )
+            captured_logs.append(f.getvalue())
+            repair_result.append([baseChromosomes, chroms, rings])
+        else:
+            chroms, rings, frags = analyzeAberrations.doRepair(
+                baseChromosomes, trimMisrep,
+                remBreaks=trimRemBreaks, index=m,
+                breaks=len(breakList)//2, baseBreaks=breakList,
+                plot=doPlot, allFragments=allFragments,
+                outFile=fileName+str(m)+'.png'
+            )
+
+        frags = [f+[m] for f in frags]
+        fullFrags += frags
+        allChroms += chroms
+        allRings += rings
+
+    if listAcentrics:
+        listAcentricSizes(baseChromosomes, allChroms + allRings)
+
+    # --- return only if requested ---
+    if return_output:
+        return repair_result, captured_logs
+
+    return None
+
+def misrepairSpectrum_outdated(fileData, header, fileName):
 	allBreaks, scaledSigma, meanE, complexity, complexitySd, dose, emptySets = fileData
 	radius = scaledSigma/sigma
 
@@ -465,10 +598,18 @@ def trackBreaks(fileData,header,fileName):
 	retString = "\t".join(map(str,[fileName,totalTracks,totalBreaks,totalBreaks/totalTracks]))
 	return retString
 
+def capture_stdout(func, *args, enable=False, **kwargs):
+    if not enable:
+        return func(*args, **kwargs), None
+
+    f = io.StringIO()
+    with redirect_stdout(f):
+        result = func(*args, **kwargs)
+    return result, f.getvalue()
 
 def postRepairDNA(fileData, header, fileName):
-	repair_results, captured_logs = misrepairSpectrum_withoutput(fileData, header, fileName)
-	standardDnaRepair.medras_bridge(repair_results, header, fileName, captured_logs)
+	repair_results, captured_logs = misrepairSpectrum_return_output_1(fileData, header, fileName, True)
+	standardDnaRepair.medras_bridge_0521(repair_results, header, fileName, captured_logs)
 	return None
 
 ###################

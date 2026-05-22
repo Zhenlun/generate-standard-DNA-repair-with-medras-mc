@@ -11,19 +11,17 @@ The SDR file is inspired by the SDD file format.
 """
 
 
+from dataclasses import field
 from email import header
 
 import numpy as np
 import os
 
-class Header:
+class Master_header:
     def __init__(self):
+        self.author = ""
         self.associated_sdd_file = ""
         self.old_chromosome_sizes = []
-        self.intact_strands_ID = []
-        self.new_chromosome_sizes = []
-        self.number_of_misrepairs = 0
-        self.number_of_inter_chromosome_misrepairs = 0
 
     def add_sdd_file_name(self, sddFileName):
         self.associated_sdd_file = sddFileName
@@ -31,33 +29,94 @@ class Header:
     def add_old_chromosome_sizes(self, old_chromosome_sizes):
         self.old_chromosome_sizes = old_chromosome_sizes
 
-    def add_intact_strands_ID(self, intact_strands_ID):
-        number_of_intact_strands = len(intact_strands_ID)
-        self.intact_strands_ID = [number_of_intact_strands] + intact_strands_ID
-
-    def add_new_chromosome_sizes(self, new_chromosome_sizes):
-        self.new_chromosome_sizes = new_chromosome_sizes
-
-    def add_number_of_misrepairs(self, number_of_misrepairs):
-        self.number_of_misrepairs = number_of_misrepairs
-
-    def add_number_of_inter_chromosome_misrepairs(self, number_of_inter_chromosome_misrepairs):
-        self.number_of_inter_chromosome_misrepairs = number_of_inter_chromosome_misrepairs
+    def add_author(self, author):
+        self.author = author
 
     def list_of_header_lines(self):
         # return a list of strings, each string is a line in the header section of the SDR file.
         header_lines = []
+        header_lines.append(f"Author: {self.author}")
         header_lines.append(f"Associated SDD File: {self.associated_sdd_file}")
         header_lines.append(f"Old Chromosome Sizes: {self.old_chromosome_sizes}")
-        header_lines.append(f"Intact Strands ID: {self.intact_strands_ID}")
-        header_lines.append(f"New Chromosome Sizes: {self.new_chromosome_sizes}")
-        header_lines.append(f"Number of Misrepairs: {self.number_of_misrepairs}")
-        header_lines.append(f"Number of Inter-Chromosome Misrepairs: {self.number_of_inter_chromosome_misrepairs}")
+        
+        header_lines.append("***end of master header***")
         return header_lines
     
     def __str__(self):
+        # print each header line on a new line
         return "\n".join(self.list_of_header_lines())
 
+
+class Repaired_cell:
+    '''
+    contains the per-cell header including information on:
+    - size of post-repair chromosomes
+    - ID of intact strands
+    - total DSB count
+    - total misrepair count
+
+    also contains all the DNA strands in the cell, which are represented as Strand objects.
+    '''
+    def __init__(self, cell_id):
+
+        #per cell header fields:
+        self.cell_id = cell_id
+        self.new_chromosome_sizes = {}
+        self.intact_strands_ID = []
+        self.total_dsb_count = 0
+        self.total_misrepair_count = 0
+        self.medras_log_fields = [] # this will contain the fields from the medras log for this cell, which contains the misrepair spectrum information. we can use this to add more fields to the header if needed.
+        
+        # DNA strands in the cell:
+        self.strands = []
+    
+    def add_strand(self, strand):
+        self.strands = self.strands + [strand]
+
+    def calculate_new_chromosome_sizes(self):
+        # calculate the new chromosome sizes
+        new_chromosome_sizes = {}
+        for strand in self.strands:
+            chromID = strand.new_strand_ID
+            frag_size = sum(abs(fragment.end - fragment.start) for fragment in strand.fragments)
+            if chromID in new_chromosome_sizes:
+                new_chromosome_sizes[chromID] += frag_size
+            else:
+                new_chromosome_sizes[chromID] = frag_size
+        self.new_chromosome_sizes = new_chromosome_sizes
+
+        #sanity check
+        sanity_check = False
+        if sanity_check:
+            print(len(self.strands) == len(new_chromosome_sizes))
+
+    # def add_single_intact_strands_ID(self, intact_strands_ID):
+    #     self.intact_strands_ID = self.intact_strands_ID + [intact_strands_ID]
+
+    def add_all_intact_strands_ID(self, list_of_intact_strands_ID):
+        self.intact_strands_ID = list_of_intact_strands_ID
+    
+    def add_total_dsb_count(self, total_dsb_count):
+        self.total_dsb_count = total_dsb_count
+    
+    def add_total_misrepair_count(self, total_misrepair_count):
+        self.total_misrepair_count = total_misrepair_count
+
+    def __str__(self):
+        start_of_header = f"***subheader - cell{self.cell_id}***"
+        # header fields, each field is a separate line:
+        header_str = f"Cell ID: {self.cell_id}\nNew Chromosome Sizes: {self.new_chromosome_sizes}\nIntact Strands ID: {self.intact_strands_ID}\nTotal DSB Count: {self.total_dsb_count}\nTotal Misrepair Count: {self.total_misrepair_count}"
+        header_medras_log_str = f"Medras-MC Log: {self.medras_log_fields}"
+        header_str = header_str + "\n" + header_medras_log_str
+
+        start_of_data = f"***data - cell{self.cell_id}***"
+        # strand fields, each strand is a separate line:
+        strands_str = "\n".join([str(strand) for strand in self.strands])
+
+        return f"{start_of_header}\n{header_str}\n{start_of_data}\n{strands_str}"
+
+
+    
 
 class Fragment:
     def __init__(self, old_strand_id, start, end, has_centromere):
@@ -95,41 +154,157 @@ class Strand:
         return self.write_data_line()
 
 
-class SDRwriter:
-    def __init__(self, sddfilename):
-        self.filename = sddfilename.replace(".txt", ".sdr")
-        self.header = []
-        self.data = []
-    
-    def add_header(self, list_of_header):
-        self.header = list_of_header
+class outputFromMisrepairSpectrum:
+    def __init__(self):
+        self.break_set = 0
+        self.dsb = 0
+        self.remaining_dsb = 0
+        self.misrepairs = 0
+        self.large_misrepairs = 0
+        self.interchromosome_misrepairs = 0
+        self.dicentrics = 0
+        self.rings = 0
+        self.excess_linear_fragments = 0
+        self.total_aberrations = 0
+        self.viability = 0
 
-    def add_entry(self, entry):
-        self.data = self.data + [entry]
+    def add_fields(self, fields):
+        if len(fields) < 7:
+            # theres no misrepair from medras
+            self.break_set = fields[0]
+            self.dsb = fields[1]
+            self.remaining_dsb = fields[2]
+            self.misrepairs = fields[3]
+        else: 
+            self.break_set = fields[0]
+            self.dsb = fields[1]
+            self.remaining_dsb = fields[2]
+            self.misrepairs = fields[3]
+            self.large_misrepairs = fields[4]
+            self.interchromosome_misrepairs = fields[5]
+            self.dicentrics = fields[6]
+            self.rings = fields[7]
+            self.excess_linear_fragments = fields[8]
+            self.total_aberrations = fields[9]
+            self.viability = fields[10]
 
-    def add_all_entries(self, list_of_entries):
-        self.data = list_of_entries
+    def __str__(self):
+        return f"Break Set: {self.break_set}, DSB: {self.dsb}, Remaining DSB: {self.remaining_dsb}, Misrepairs: {self.misrepairs}, Large Misrepairs: {self.large_misrepairs}, Interchromosome Misrepairs: {self.interchromosome_misrepairs}, Dicentrics: {self.dicentrics}, Rings: {self.rings}, Excess Linear Fragments: {self.excess_linear_fragments}, Total Aberrations: {self.total_aberrations}, Viability: {self.viability}"
 
-    def write_file(self, destination=None): # default is to write where the script is running
-        if destination is None:
-            destination = self.filename
-        if not destination.endswith(".sdr"):
-            raise ValueError("Destination filename must end with .sdr")
-        
-        with open(destination, 'w') as f:
-
-            # Write Header fields
-            for line in self.header:
-                f.write(line + ";\n")
-            
-            f.write("***EndOfHeader***;")
-
-            #write data lines
-            for line in self.data:
-                f.write(line.write_data_line() + "\n")
+class Import_cell:
+    def __init__(self, cell_id):
+        self.cell_id = cell_id
+        self.strands = []
+        self.intact_strand_ids = []
 
 
 def import_strands(repair_results):
+    cells = []
+
+    for cell_id, (chromosomes, linear_chroms, ring_chroms) in enumerate(repair_results):
+        cell = Import_cell(cell_id)
+        strand_id = 0
+
+        # --- Process linear chromosomes ---
+        for chrom in linear_chroms:
+            strand = Strand(cell_id, strand_id, is_linear=True)
+
+            for seg in chrom:
+                chromID, start, end, _, _ = seg
+                chrom_size = chromosomes[chromID][2]
+                centromere = 0.5 * chrom_size
+
+                # Check if centromere lies inside this fragment
+                has_cent = int(start <= centromere <= end or end <= centromere <= start)
+                strand.add_fragment(chromID, start, end, has_cent)
+
+                # Detect intact linear chromosome (handle possible reversed coordinates)
+                if len(chrom) == 1 and min(start, end) == 0 and max(start, end) == chrom_size:
+                    cell.intact_strand_ids.append(strand_id)
+
+            cell.strands.append(strand)
+            strand_id += 1
+
+        # --- Process ring chromosomes ---
+        for chrom in ring_chroms:
+            strand = Strand(cell_id, strand_id, is_linear=False)
+
+            for seg in chrom:
+                chromID, start, end, _, _ = seg
+                chrom_size = chromosomes[chromID][2]
+                centromere = 0.5 * chrom_size
+
+                has_cent = int(start <= centromere <= end or end <= centromere <= start)
+                strand.add_fragment(chromID, start, end, has_cent)
+
+            cell.strands.append(strand)
+            strand_id += 1
+
+        cells.append(cell)
+
+    return cells
+
+
+
+# the final function to be called by medras
+def medras_bridge_0521(repair_results, imported_header, sddFileName, captured_logs):
+    
+    # medras default output:
+    first_log_fields = captured_logs[0].split()
+    log_first_line_cleaned = " ".join(first_log_fields[18:])
+    new_captured_logs = [log_first_line_cleaned] + captured_logs[1:]
+
+    old_chromosome_sizes_str = str(imported_header["Chromosomes"][0]) + ", "
+    old_chromosome_sizes_list = imported_header["Chromosomes"][1]
+    for size in old_chromosome_sizes_list:
+        old_chromosome_sizes_str += str(size) + ", "
+    #old_chromosome_sizes_str = ", ".join(str(size) for size in imported_header["Chromosomes"])
+
+    # declare classes
+    sdr_header = Master_header()
+    sdr_header.add_author("Zhenlun Dai")
+    sdr_header.add_sdd_file_name(sddFileName)
+    sdr_header.add_old_chromosome_sizes(old_chromosome_sizes_str) # this is old chromosome sizes in MBPs. we can also add the individual chromosome sizes if needed.
+
+    print(sdr_header)
+    
+    # add data to sdr
+    imported_cells = import_strands(repair_results)
+
+    # add imported_cells to repaired_cells
+    repaired_cells = []
+    for cell in imported_cells:
+        repaired_cell = Repaired_cell(cell.cell_id)
+        repaired_cell.add_all_intact_strands_ID(cell.intact_strand_ids)
+        for strand in cell.strands:
+            repaired_cell.add_strand(strand)
+
+        #
+
+        # add medras log
+        current_cell_captured_log = new_captured_logs[cell.cell_id]
+        log_fields = current_cell_captured_log.split()
+        misrepair_spectrum = outputFromMisrepairSpectrum()
+        misrepair_spectrum.add_fields(log_fields)
+        repaired_cell.medras_log_fields = log_fields
+
+        #calculate new chromosome size
+        repaired_cell.calculate_new_chromosome_sizes()
+        repaired_cell.add_total_dsb_count(misrepair_spectrum.dsb)
+        repaired_cell.add_total_misrepair_count(misrepair_spectrum.misrepairs)
+
+        repaired_cells.append(repaired_cell)
+        print(repaired_cell)
+
+
+
+
+
+
+# old code --------------------------------------------------------------------------------
+
+
+def import_strands_old(repair_results):
     strands = []
     cell_id = 0
     intact_strands_ID = []
@@ -176,7 +351,7 @@ def medras_bridge_working(repair_results, imported_header, sddFileName, captured
     new_captured_logs = [log_first_line_cleaned] + captured_logs[1:]
 
     # declare classes
-    sdr_header = Header()
+    sdr_header = Master_header()
     SDR = SDRwriter(sddFileName)
     
     # add data to sdr
@@ -193,6 +368,8 @@ def medras_bridge_working(repair_results, imported_header, sddFileName, captured
     sdr_header.add_new_chromosome_sizes()
     sdr_header.add_number_of_misrepairs()
     sdr_header.add_number_of_inter_chromosome_misrepairs()
+
+
 
 
 # use this one for tests
@@ -251,6 +428,42 @@ def medras_bridge(repair_results, imported_header, sddFileName, captured_logs):
     if print_header:
         print(imported_header)
         print(imported_header["Chromosomes"]) # this is old chromosome sizes in MBPs
+
+
+class SDRwriter:
+    def __init__(self, sddfilename):
+        self.filename = sddfilename.replace(".txt", ".sdr")
+        self.header = []
+        self.data = []
+    
+    def add_header(self, list_of_header):
+        self.header = list_of_header
+
+    def add_entry(self, entry):
+        self.data = self.data + [entry]
+
+    def add_all_entries(self, list_of_entries):
+        self.data = list_of_entries
+
+    def write_file(self, destination=None): # default is to write where the script is running
+        if destination is None:
+            destination = self.filename
+        if not destination.endswith(".sdr"):
+            raise ValueError("Destination filename must end with .sdr")
+        
+        with open(destination, 'w') as f:
+
+            # Write Header fields
+            for line in self.header:
+                f.write(line + ";\n")
+            
+            f.write("***EndOfHeader***;")
+
+            #write data lines
+            for line in self.data:
+                f.write(line.write_data_line() + "\n")
+
+
 
 #----- added -----
 
