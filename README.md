@@ -16,6 +16,7 @@ Functions added are:
 
 To output an SDR file, use medrasrepair.repairSimulation() with analysisFunction="postRepairDNA".
 
-to be done:
+status:
   - As of now, SDR file is still in development. Functions and entries will change.
-  - The SDR addon isnt complete.
+  - SDR file will now print to console with the ipynb notebook.
+  - fields arent in their final form, but will only require minimal tweaks.
