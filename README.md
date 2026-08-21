@@ -12,11 +12,9 @@ Functions modified in Medras-MC are:
 
 Functions added are:
   - medrasrepair.postRepairDNA()
-  - The entire standardDnaRepair file.
+  - The entire standardDnaRepair.py file.
 
 To output an SDR file, use medrasrepair.repairSimulation() with analysisFunction="postRepairDNA".
 
 status:
-  - As of now, SDR file is still in development. Functions and entries will change.
-  - SDR file will now print to console with the ipynb notebook.
-  - fields arent in their final form, but will only require minimal tweaks.
+  Complete
