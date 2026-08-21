@@ -334,7 +334,7 @@ def medras_bridge_0521(repair_results, imported_header, sddFileName, captured_lo
             print(repaired_cell)
 
         if save_SDR_to_cwd:
-            file.write(str(repaired_cell))
+            file.write(str(repaired_cell) + "\n")
     
     if save_SDR_to_cwd:
         file.close()
