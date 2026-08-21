@@ -17,6 +17,10 @@ from email import header
 import numpy as np
 import os
 
+keep_intact_strand = True
+print_SDR_to_console = True
+save_SDR_to_cwd = True
+
 class Master_header:
     def __init__(self):
         self.author = ""
@@ -35,9 +39,10 @@ class Master_header:
     def list_of_header_lines(self):
         # return a list of strings, each string is a line in the header section of the SDR file.
         header_lines = []
+        header_lines.append("SDR Version: SDRv2.0")
         header_lines.append(f"Author: {self.author}")
         header_lines.append(f"Associated SDD File: {self.associated_sdd_file}")
-        header_lines.append(f"Old Chromosome Sizes: {self.old_chromosome_sizes}")
+        header_lines.append(f"Intact Chromosome Sizes: {self.old_chromosome_sizes}")
         
         header_lines.append("***end of master header***")
         return header_lines
@@ -105,8 +110,8 @@ class Repaired_cell:
     def __str__(self):
         start_of_header = f"***subheader - cell{self.cell_id}***"
         # header fields, each field is a separate line:
-        header_str = f"Cell ID: {self.cell_id}\nNew Chromosome Sizes: {self.new_chromosome_sizes}\nIntact Strands ID: {self.intact_strands_ID}\nTotal DSB Count: {self.total_dsb_count}\nTotal Misrepair Count: {self.total_misrepair_count}"
-        header_medras_log_str = f"Medras-MC Log: {self.medras_log_fields}"
+        header_str = f"Cell ID: {self.cell_id}\nMutated Chromosome Sizes: {self.new_chromosome_sizes}\nIntact Strands ID: {len(self.intact_strands_ID)}, {', '.join(map(str, self.intact_strands_ID))}\nTotal DSB Count: {self.total_dsb_count}\nTotal Misrepair Count: {self.total_misrepair_count}"
+        header_medras_log_str = f"Medras-MC Log: {', '.join(self.medras_log_fields)}"
         header_str = header_str + "\n" + header_medras_log_str
 
         start_of_data = f"***data - cell{self.cell_id}***"
@@ -203,12 +208,19 @@ def import_strands(repair_results):
 
     for cell_id, (chromosomes, linear_chroms, ring_chroms) in enumerate(repair_results):
         cell = Import_cell(cell_id)
-        strand_id = 0
+
+        if keep_intact_strand:
+            strand_id = 0
+        else:
+            strand_id = 46
 
         # --- Process linear chromosomes ---
+        temp_chrom_ID = 0
         for chrom in linear_chroms:
             strand = Strand(cell_id, strand_id, is_linear=True)
 
+            
+            intact_strand = False
             for seg in chrom:
                 chromID, start, end, _, _ = seg
                 chrom_size = chromosomes[chromID][2]
@@ -220,9 +232,26 @@ def import_strands(repair_results):
 
                 # Detect intact linear chromosome (handle possible reversed coordinates)
                 if len(chrom) == 1 and min(start, end) == 0 and max(start, end) == chrom_size:
-                    cell.intact_strand_ids.append(strand_id)
+                    # cell.intact_strand_ids.append(strand_id)
+                    cell.intact_strand_ids.append(chromID)
+                    temp_chrom_ID = chromID
+                    intact_strand = True
 
-            cell.strands.append(strand)
+            # check if its intact strand out of the seg loop
+            if keep_intact_strand and intact_strand:
+                strand.new_strand_ID = temp_chrom_ID
+                cell.strands.append(strand)
+            elif keep_intact_strand and (not intact_strand):
+                temp_chrom_ID += 1
+                strand.new_strand_ID = temp_chrom_ID
+                cell.strands.append(strand)
+
+            elif (not keep_intact_strand) and intact_strand:
+                continue
+            else:
+                cell.strands.append(strand)
+
+
             strand_id += 1
 
         # --- Process ring chromosomes ---
@@ -266,7 +295,13 @@ def medras_bridge_0521(repair_results, imported_header, sddFileName, captured_lo
     sdr_header.add_sdd_file_name(sddFileName)
     sdr_header.add_old_chromosome_sizes(old_chromosome_sizes_str) # this is old chromosome sizes in MBPs. we can also add the individual chromosome sizes if needed.
 
-    print(sdr_header)
+    if print_SDR_to_console:
+        print(sdr_header)
+
+    if save_SDR_to_cwd:
+        SDRfilename = sddFileName[:-4] + ".sdr"
+        file = open(SDRfilename, "w")
+        file.write(str(sdr_header) + "\n")
     
     # add data to sdr
     imported_cells = import_strands(repair_results)
@@ -294,8 +329,15 @@ def medras_bridge_0521(repair_results, imported_header, sddFileName, captured_lo
         repaired_cell.add_total_misrepair_count(misrepair_spectrum.misrepairs)
 
         repaired_cells.append(repaired_cell)
-        print(repaired_cell)
 
+        if print_SDR_to_console:
+            print(repaired_cell)
+
+        if save_SDR_to_cwd:
+            file.write(str(repaired_cell))
+    
+    if save_SDR_to_cwd:
+        file.close()
 
 
 
