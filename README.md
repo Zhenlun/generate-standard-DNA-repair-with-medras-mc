@@ -16,5 +16,10 @@ Functions added are:
 
 To output an SDR file, use medrasrepair.repairSimulation() with analysisFunction="postRepairDNA".
 
-status:
-  Complete
+Change log:
+  Added master header - SDR version
+  Changed master header - OLD chromosome size to INTACT chromosome size
+  Changed subheader - NEW chromosome size to MUTATED chromosome size
+  Added toggle at beginning of standardDnaRepair.py to toggle keep intact strand, print to console and save to current work directory
+  Changed formatting for subheader entries to not use python arrays and have unified format
+  Strand index is no longer continuous. 0 to 45 are always intact strands and 46+ are always mutated strands
