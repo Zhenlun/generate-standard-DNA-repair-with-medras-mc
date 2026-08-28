@@ -39,10 +39,10 @@ class Master_header:
     def list_of_header_lines(self):
         # return a list of strings, each string is a line in the header section of the SDR file.
         header_lines = []
-        header_lines.append("SDR Version: SDRv2.0")
-        header_lines.append(f"Author: {self.author}")
-        header_lines.append(f"Associated SDD File: {self.associated_sdd_file}")
-        header_lines.append(f"Intact Chromosome Sizes: {self.old_chromosome_sizes}")
+        header_lines.append("SDR Version, SDRv2.1;")
+        header_lines.append(f"Author, {self.author};")
+        header_lines.append(f"Associated SDD File, {self.associated_sdd_file};")
+        header_lines.append(f"Intact Chromosome Sizes, {self.old_chromosome_sizes};")
         
         header_lines.append("***end of master header***")
         return header_lines
@@ -108,13 +108,13 @@ class Repaired_cell:
         self.total_misrepair_count = total_misrepair_count
 
     def __str__(self):
-        start_of_header = f"***subheader - cell{self.cell_id}***"
+        start_of_header = f"\n***subheader - cell{self.cell_id}***"
         # header fields, each field is a separate line:
-        header_str = f"Cell ID: {self.cell_id}\nMutated Chromosome Sizes: {self.new_chromosome_sizes}\nIntact Strands ID: {len(self.intact_strands_ID)}, {', '.join(map(str, self.intact_strands_ID))}\nTotal DSB Count: {self.total_dsb_count}\nTotal Misrepair Count: {self.total_misrepair_count}"
-        header_medras_log_str = f"Medras-MC Log: {', '.join(self.medras_log_fields)}"
+        header_str = f"Cell ID, {self.cell_id};\nMutated Chromosome Sizes, {self.new_chromosome_sizes};\nIntact Strands ID, {len(self.intact_strands_ID)}, {', '.join(map(str, self.intact_strands_ID))};\nTotal DSB Count, {self.total_dsb_count};\nTotal Misrepair Count, {self.total_misrepair_count};"
+        header_medras_log_str = f"Medras-MC Log, {', '.join(self.medras_log_fields)};"
         header_str = header_str + "\n" + header_medras_log_str
 
-        start_of_data = f"***data - cell{self.cell_id}***"
+        start_of_data = f"\n***data - cell{self.cell_id}***"
         # strand fields, each strand is a separate line:
         strands_str = "\n".join([str(strand) for strand in self.strands])
 
@@ -210,12 +210,12 @@ def import_strands(repair_results):
         cell = Import_cell(cell_id)
 
         if keep_intact_strand:
-            strand_id = 0
+            strand_id = 1
         else:
-            strand_id = 46
+            strand_id = 47
 
         # --- Process linear chromosomes ---
-        temp_chrom_ID = 0
+        temp_chrom_ID = 1
         for chrom in linear_chroms:
             strand = Strand(cell_id, strand_id, is_linear=True)
 
@@ -228,13 +228,13 @@ def import_strands(repair_results):
 
                 # Check if centromere lies inside this fragment
                 has_cent = int(start <= centromere <= end or end <= centromere <= start)
-                strand.add_fragment(chromID, start, end, has_cent)
+                strand.add_fragment(chromID + 1, start, end, has_cent)
 
                 # Detect intact linear chromosome (handle possible reversed coordinates)
                 if len(chrom) == 1 and min(start, end) == 0 and max(start, end) == chrom_size:
                     # cell.intact_strand_ids.append(strand_id)
-                    cell.intact_strand_ids.append(chromID)
-                    temp_chrom_ID = chromID
+                    cell.intact_strand_ids.append(chromID + 1)
+                    temp_chrom_ID = chromID + 1
                     intact_strand = True
 
             # check if its intact strand out of the seg loop
@@ -249,6 +249,7 @@ def import_strands(repair_results):
             elif (not keep_intact_strand) and intact_strand:
                 continue
             else:
+                temp_chrom_ID += 1
                 cell.strands.append(strand)
 
 
@@ -256,7 +257,8 @@ def import_strands(repair_results):
 
         # --- Process ring chromosomes ---
         for chrom in ring_chroms:
-            strand = Strand(cell_id, strand_id, is_linear=False)
+            temp_chrom_ID += 1
+            strand = Strand(cell_id, temp_chrom_ID, is_linear=False)
 
             for seg in chrom:
                 chromID, start, end, _, _ = seg
@@ -264,7 +266,7 @@ def import_strands(repair_results):
                 centromere = 0.5 * chrom_size
 
                 has_cent = int(start <= centromere <= end or end <= centromere <= start)
-                strand.add_fragment(chromID, start, end, has_cent)
+                strand.add_fragment(chromID + 1, start, end, has_cent)
 
             cell.strands.append(strand)
             strand_id += 1
