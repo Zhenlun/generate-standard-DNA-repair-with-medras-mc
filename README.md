@@ -16,7 +16,13 @@ Functions added are:
 
 To output an SDR file, use medrasrepair.repairSimulation() with analysisFunction="postRepairDNA".
 
-Change log:
+SDRv2.1 Change log:
+- Changed headers to use comma and semi-colon to look more similar to SDD format.
+- Strand index changed to have 1 to 46 to be always intact strands and 47+ are always mutated strands
+- The fragment index are also changed to have the +1, just like strand index
+- Fixed a bug that when intact strands are displayed, ring chromosomes would always start at 46 despite it not being the 46th chromosome
+
+SDRv2.0 Change log:
 - Added master header - SDR version
 - Changed master header - OLD chromosome size to INTACT chromosome size
 - Changed subheader - NEW chromosome size to MUTATED chromosome size
