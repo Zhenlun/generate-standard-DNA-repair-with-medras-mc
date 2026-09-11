@@ -1,4 +1,4 @@
-# generate-post-repair-genome-with-medras-mc
+# generate-SDR-with-medras-mc
 
 This repo builds on top of Medras-MC to output a Standard DNA Repair (SDR) file.
 
