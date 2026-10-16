@@ -17,14 +17,14 @@ Functions added are:
 To output an SDR file, use medrasrepair.repairSimulation() with analysisFunction="SpectrumSDR".
 
 SDRv2.2 Change log:
-- added cell cycle phase. Please note that as in the SDD format, the value can be an integer only or an integer with a float. 
+- Added cell cycle phase. Please note that as in the SDD format, the value can be an integer only or an integer with a float. 
 - Changed the name of analysisFunction to "SpectrumSDR".
-- no longer outputs a .joinedpairs file as it is a reminiscence of beta testing.
-- trimmed off old, unused code.
-- changed the name of the function standardDnaRepair.medras_bridge_0521() to medras_bridge()
-- changed the name of the function medrasrepair.misrepairSpectrum_with_output_1() to misrepairSpectrum_SDR().
-- fixed a bug where if a cell has no damage, the intact strand ID in per-cell header is empty.
-- fixed a bug where an extra comma is added at the end of intact chromosome sizes.
+- No longer outputs a .joinedpairs file as it is a reminiscence of beta testing.
+- Trimmed off old, unused code.
+- Changed the name of the function standardDnaRepair.medras_bridge_0521() to medras_bridge()
+- Changed the name of the function medrasrepair.misrepairSpectrum_with_output_1() to misrepairSpectrum_SDR().
+- Fixed a bug where if a cell has no damage, the intact strand ID in per-cell header is empty.
+- Fixed a bug where an extra comma is added at the end of intact chromosome sizes.
 
 SDRv2.1 Change log:
 - Changed headers to use comma and semi-colon to look more similar to SDD format.
