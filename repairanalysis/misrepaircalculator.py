@@ -88,22 +88,11 @@ def pickRepair(interactionArray,n):
 
 def singleRepair(filename, breakList,rateTable,sigma=None, finalTime = np.inf):
 
-    outfilename = str(filename.split(".")[0]) + ".joinedpairs"
-    #with open("my_new_file.txtn", "w") as file:
-    with open(outfilename, "a") as file:
-
-        #write all the breaks to file
-        printBreak = copy.deepcopy(breakList)
-        # for ind in printBreak:
-        #     file.write(str(ind) + "\n")
-        # file.write("------------------------------" + "\n")
-
         # Sort breaks by order of creation in time and set up interaction rates if needed
         if rateTable is None: 
             breakList.sort(key = lambda x:x[7])
             rateTable=buildRateTable(breakList,sigma)
 
-        #printBreak = copy.deepcopy(breakList)
 
         # Get fast/slow kinetic data from breaklist
         repairRate = np.array([fastRate/2 if b[2]==0 else slowRate/2 for b in breakList])
@@ -144,10 +133,6 @@ def singleRepair(filename, breakList,rateTable,sigma=None, finalTime = np.inf):
                 endOne = liveBreaks[np.argmin(interactionTimes)]
                 endTwo = pickRepair(rateTable[endOne,0:lastBreak+1],endOne)
 
-                # file.write(str((int(endOne), int(endTwo))) + "\n")
-                # file.write(str(printBreak[endOne]) + "\n")
-                # file.write(str(printBreak[endTwo]) + "\n")
-
                 # Assign complexity for foci clearance based on most complex end
                 complexity = max(breakList[endOne][2],breakList[endTwo][2])
 
@@ -162,10 +147,6 @@ def singleRepair(filename, breakList,rateTable,sigma=None, finalTime = np.inf):
                     separation = np.sqrt(distanceToSq(breakList[endOne][1], breakList[endTwo][1]))
                     misrepairedPairs.append([breakList[endOne], breakList[endTwo], separation, interChrom])
 
-                    #write misrepairs to file
-                    file.write(str([(int(endOne), int(endTwo)), "interChrom = " + str(interChrom)]) + "\n")
-                    file.write(str(printBreak[endOne]) + "\n")
-                    file.write(str(printBreak[endTwo]) + "\n")
 
                     # Track if either end is the second end from a DSB. Log reduction in breaks if so
                     p1Partner = endOne +1 - 2*(endOne%2)
@@ -213,31 +194,6 @@ def singleRepair(filename, breakList,rateTable,sigma=None, finalTime = np.inf):
                 p2 = remBreaks.pop()
                 repairEvents.append([1E6,p1,p2,1])
                 misrepairedPairs.append([breakList[p1],breakList[p2],-1,0])
-
-
-
-
-        # Otherwise just return 'full' repair
-        # with open("my_new_file.txtn", "w") as file:
-        #     # file.write("------------------------------------" + "\n")
-        #     # file.write("this is each break ends, comes in pairs." + "\n")
-        #     # file.write("look for SDD file format's notation for what each field after the first means" + "\n")
-        #     for ind in printBreak:
-        #         file.write(str(ind) + "\n")
-        #     file.write("------------------------------------" + "\n")
-        #     file.write("this is which pair is not joined together with its original ends" + "\n")
-        #     file.write("break end 1, break end 2, separation, if its interchromosome. note the first entry in list is the break pair's index and both ends share the same index" + "\n")
-
-        #     for rep in misrepairedPairs:
-        #         #for ind in rep:
-        #         file.write(str(rep) + "\n")
-
-        #     file.write("------------------------------------" + "\n")
-        #     file.write("list of all repair events" + "\n")
-        #     file.write("repaired time, chromosome end 1, end 2, complexity. note the 2nd and 3rd entry is the break end's index, so a 44 here means its from the 22nd break pair" + "\n")
-        #     for ind in repairEvents:
-        #         file.write(str(ind) + "\n")
-        file.write("------------------------------" + "\n")
 
         return misrepairedPairs, repairEvents, []
 

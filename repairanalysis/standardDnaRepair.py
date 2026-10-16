@@ -17,14 +17,15 @@ from email import header
 import numpy as np
 import os
 
-keep_intact_strand = True
-print_SDR_to_console = True
+keep_intact_strand = False
+print_SDR_to_console = False
 save_SDR_to_cwd = True
 
 class Master_header:
     def __init__(self):
         self.author = ""
         self.associated_sdd_file = ""
+        self.cell_cycle_phase = ""
         self.old_chromosome_sizes = []
 
     def add_sdd_file_name(self, sddFileName):
@@ -36,14 +37,21 @@ class Master_header:
     def add_author(self, author):
         self.author = author
 
+    def add_cell_cycle_phase(self, phase):
+        if type(phase) == float or type(phase) == int:
+            self.cell_cycle_phase = f"{str(int(phase))}"
+        elif type(phase) == list:
+            ph, progress = phase
+            self.cell_cycle_phase = f"{str(int(ph))}, {str(float(progress))}"
+
     def list_of_header_lines(self):
         # return a list of strings, each string is a line in the header section of the SDR file.
         header_lines = []
-        header_lines.append("SDR Version, SDRv2.1;")
+        header_lines.append("SDR Version, SDRv2.2;")
         header_lines.append(f"Author, {self.author};")
         header_lines.append(f"Associated SDD File, {self.associated_sdd_file};")
+        header_lines.append(f"Cell Cycle Phase, {self.cell_cycle_phase};")
         header_lines.append(f"Intact Chromosome Sizes, {self.old_chromosome_sizes};")
-        
         header_lines.append("***end of master header***")
         return header_lines
     
@@ -99,7 +107,10 @@ class Repaired_cell:
     #     self.intact_strands_ID = self.intact_strands_ID + [intact_strands_ID]
 
     def add_all_intact_strands_ID(self, list_of_intact_strands_ID):
-        self.intact_strands_ID = list_of_intact_strands_ID
+        if len(list_of_intact_strands_ID) > 0:
+            self.intact_strands_ID = list_of_intact_strands_ID
+        elif len(list_of_intact_strands_ID) == 0:
+            self.intact_strands_ID = list(range(1, 47))
     
     def add_total_dsb_count(self, total_dsb_count):
         self.total_dsb_count = total_dsb_count
@@ -108,13 +119,17 @@ class Repaired_cell:
         self.total_misrepair_count = total_misrepair_count
 
     def __str__(self):
-        start_of_header = f"\n***subheader - cell{self.cell_id}***"
+        start_of_header = f"\n***subheader - cell {self.cell_id}***"
         # header fields, each field is a separate line:
-        header_str = f"Cell ID, {self.cell_id};\nMutated Chromosome Sizes, {self.new_chromosome_sizes};\nIntact Strands ID, {len(self.intact_strands_ID)}, {', '.join(map(str, self.intact_strands_ID))};\nTotal DSB Count, {self.total_dsb_count};\nTotal Misrepair Count, {self.total_misrepair_count};"
+        header_str = f"""Cell ID, {self.cell_id};
+Mutated Chromosome Sizes, {self.new_chromosome_sizes};
+Intact Strands ID, {len(self.intact_strands_ID)}, {', '.join(map(str, self.intact_strands_ID))};
+Total DSB Count, {self.total_dsb_count};
+Total Misrepair Count, {self.total_misrepair_count}; \n"""
         header_medras_log_str = f"Medras-MC Log, {', '.join(self.medras_log_fields)};"
-        header_str = header_str + "\n" + header_medras_log_str
+        header_str = header_str + header_medras_log_str
 
-        start_of_data = f"\n***data - cell{self.cell_id}***"
+        start_of_data = f"\n***data - cell {self.cell_id}***"
         # strand fields, each strand is a separate line:
         strands_str = "\n".join([str(strand) for strand in self.strands])
 
@@ -194,7 +209,18 @@ class outputFromMisrepairSpectrum:
             self.viability = fields[10]
 
     def __str__(self):
-        return f"Break Set: {self.break_set}, DSB: {self.dsb}, Remaining DSB: {self.remaining_dsb}, Misrepairs: {self.misrepairs}, Large Misrepairs: {self.large_misrepairs}, Interchromosome Misrepairs: {self.interchromosome_misrepairs}, Dicentrics: {self.dicentrics}, Rings: {self.rings}, Excess Linear Fragments: {self.excess_linear_fragments}, Total Aberrations: {self.total_aberrations}, Viability: {self.viability}"
+        return f"""
+Break Set: {self.break_set}, 
+DSB: {self.dsb}, 
+Remaining DSB: {self.remaining_dsb}, 
+Misrepairs: {self.misrepairs}, 
+Large Misrepairs: {self.large_misrepairs}, 
+Interchromosome Misrepairs: {self.interchromosome_misrepairs}, 
+Dicentrics: {self.dicentrics}, 
+Rings: {self.rings}, 
+Excess Linear Fragments: {self.excess_linear_fragments}, 
+Total Aberrations: {self.total_aberrations}, 
+Viability: {self.viability}"""
 
 class Import_cell:
     def __init__(self, cell_id):
@@ -278,7 +304,7 @@ def import_strands(repair_results):
 
 
 # the final function to be called by medras
-def medras_bridge_0521(repair_results, imported_header, sddFileName, captured_logs):
+def medras_bridge(repair_results, imported_header, sddFileName, captured_logs):
     
     # medras default output:
     first_log_fields = captured_logs[0].split()
@@ -290,11 +316,13 @@ def medras_bridge_0521(repair_results, imported_header, sddFileName, captured_lo
     for size in old_chromosome_sizes_list:
         old_chromosome_sizes_str += str(size) + ", "
     #old_chromosome_sizes_str = ", ".join(str(size) for size in imported_header["Chromosomes"])
+    old_chromosome_sizes_str = old_chromosome_sizes_str[:-2]
 
     # declare classes
     sdr_header = Master_header()
     sdr_header.add_author("Zhenlun Dai")
     sdr_header.add_sdd_file_name(sddFileName)
+    sdr_header.add_cell_cycle_phase(imported_header["Cell Cycle Phase"])
     sdr_header.add_old_chromosome_sizes(old_chromosome_sizes_str) # this is old chromosome sizes in MBPs. we can also add the individual chromosome sizes if needed.
 
     if print_SDR_to_console:
@@ -340,195 +368,3 @@ def medras_bridge_0521(repair_results, imported_header, sddFileName, captured_lo
     
     if save_SDR_to_cwd:
         file.close()
-
-
-
-
-
-# old code --------------------------------------------------------------------------------
-
-
-def import_strands_old(repair_results):
-    strands = []
-    cell_id = 0
-    intact_strands_ID = []
-
-    for res in repair_results:
-        chromosomes, linearchrom, ringchrom = res
-        strandID = 0
-
-        for chrom in linearchrom:
-            new_strand = Strand(cell_id, strandID, is_linear=True)
-            for seg in chrom:
-                chromID, start, end, _, _ = seg
-                hasCent = 1 if (start <= 0.5*chromosomes[chromID][2] <= end) or (end <= 0.5*chromosomes[chromID][2] <= start) else 0
-                new_strand.add_fragment(chromID, start, end, hasCent)
-
-                # check if this is an intact strand
-                # if theres only 1 segment in the chromosome and start is 0 and end is the chromosome size:
-                if len(chrom) == 1 and start == 0 and end == chromosomes[chromID][2]:
-                    intact_strands_ID.append(strandID)
-
-            strandID += 1
-            strands.append(new_strand)
-
-        for chrom in ringchrom:
-            new_strand = Strand(cell_id, strandID, is_linear=False)
-            for seg in chrom:
-                chromID, start, end, _, _ = seg
-                hasCent = 1 if (start <= 0.5*chromosomes[chromID][2] <= end) or (end <= 0.5*chromosomes[chromID][2] <= start) else 0
-                new_strand.add_fragment(chromID, start, end, hasCent)
-
-            strandID += 1
-            strands.append(new_strand)
-
-        cell_id += 1
-    return strands, intact_strands_ID
-
-
-# the final function to be called by medras
-def medras_bridge_working(repair_results, imported_header, sddFileName, captured_logs):
-    
-    # medras default output:
-    first_log_fields = captured_logs[0].split()
-    log_first_line_cleaned = " ".join(first_log_fields[18:])
-    new_captured_logs = [log_first_line_cleaned] + captured_logs[1:]
-
-    # declare classes
-    sdr_header = Master_header()
-    SDR = SDRwriter(sddFileName)
-    
-    # add data to sdr
-    all_strands_in_file, intact_strands_ID = import_strands(repair_results)
-    SDR.add_all_entries(all_strands_in_file)
-
-    #add header fields to header
-    sdr_header.add_sdd_file_name(sddFileName)
-    sdr_header.add_old_chromosome_sizes(imported_header["Chromosomes"])
-    sdr_header.add_intact_strands_ID(intact_strands_ID)
-
-    #WIP
-    # these fields are different per cell. think of a way to represent these per cell
-    sdr_header.add_new_chromosome_sizes()
-    sdr_header.add_number_of_misrepairs()
-    sdr_header.add_number_of_inter_chromosome_misrepairs()
-
-
-
-
-# use this one for tests
-def medras_bridge(repair_results, imported_header, sddFileName, captured_logs):
-    # ---------------------------------------------------------
-    # OUTPUT: Pre-repair segments, repair joins, final strands
-    # ---------------------------------------------------------
-    print_results = False
-    print_header = False
-    print_filename = False
-    print_captured_logs = True
-
-    # 1. Take the first log and split it into a list of words
-    first_log_fields = captured_logs[0].split()
-
-    # 2. Keep only the data (everything after the 18th word)
-    # Then join it back into a string so it matches the format of the other logs
-    log_first_line_cleaned = " ".join(first_log_fields[18:])
-
-    # 3. Create the new list with the cleaned first line
-    new_captured_logs = [log_first_line_cleaned] + captured_logs[1:]
-
-    if print_captured_logs:
-        for i, log in enumerate(new_captured_logs):
-            print(f"--- Captured Log for Cell {i} ---")
-            print(log.split())
-
-    if print_filename:
-        print(sddFileName)
-
-    if print_results:
-        cell_id = 0
-        for res in repair_results:
-            chromosomes, linearchrom, ringchrom = res
-
-            strandID = 0
-            # Linear chromosomes
-            for chrom in linearchrom:
-                print(f"STRAND {strandID} LINEAR")
-                for seg in chrom:
-                    chromID, start, end, _, _ = seg
-                    hasCent = 1 if (start <= 0.5*chromosomes[chromID][2] <= end) or (end <= 0.5*chromosomes[chromID][2] <= start) else 0
-                    print(f"  SEG {chromID} {start} {end} {hasCent}")
-                strandID += 1
-
-            # Ring chromosomes
-            for chrom in ringchrom:
-                print(f"STRAND {strandID} RING")
-                for seg in chrom:
-                    chromID, start, end, _, _ = seg
-                    hasCent = 1 if (start <= 0.5*chromosomes[chromID][2] <= end) or (end <= 0.5*chromosomes[chromID][2] <= start) else 0
-                    print(f"  SEG {chromID} {start} {end} {hasCent}")
-                strandID += 1
-            cell_id += 1
-            
-    if print_header:
-        print(imported_header)
-        print(imported_header["Chromosomes"]) # this is old chromosome sizes in MBPs
-
-
-class SDRwriter:
-    def __init__(self, sddfilename):
-        self.filename = sddfilename.replace(".txt", ".sdr")
-        self.header = []
-        self.data = []
-    
-    def add_header(self, list_of_header):
-        self.header = list_of_header
-
-    def add_entry(self, entry):
-        self.data = self.data + [entry]
-
-    def add_all_entries(self, list_of_entries):
-        self.data = list_of_entries
-
-    def write_file(self, destination=None): # default is to write where the script is running
-        if destination is None:
-            destination = self.filename
-        if not destination.endswith(".sdr"):
-            raise ValueError("Destination filename must end with .sdr")
-        
-        with open(destination, 'w') as f:
-
-            # Write Header fields
-            for line in self.header:
-                f.write(line + ";\n")
-            
-            f.write("***EndOfHeader***;")
-
-            #write data lines
-            for line in self.data:
-                f.write(line.write_data_line() + "\n")
-
-
-
-#----- added -----
-
-
-
-# # --- USAGE EXAMPLE ---
-
-# # 1. Create a Strand Entry (Cell 1, Strand 15, Linear)
-# row1 = StrandEntry(cell_id=1, strand_id=15, is_linear=True)
-# row1.add_fragment(42, 0, 0.231, 0)
-# row1.add_fragment(13, 0.55, 0.45, 1)
-# row1.add_fragment(6, 0.35, 0, 0)
-
-# # 2. Create another entry (Cell 2, Strand 7, Ring)
-# row2 = StrandEntry(cell_id=2, strand_id=7, is_linear=False)
-# row2.add_fragment(32, 0.57, 0.76, 0)
-
-# # 3. Save to file
-# writer = SDRWriter("examplesdd.txt")
-# writer.add_entry(row1)
-# writer.add_entry(row2)
-
-# header = ["Format: SDD-Inspired", "Generated by Python Script", "Version: 1.0"]
-# writer.write_file(header)
