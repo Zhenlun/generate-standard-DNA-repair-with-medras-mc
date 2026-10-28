@@ -4,7 +4,7 @@ This repo builds on top of Medras-MC to output a Standard DNA Repair (SDR) file.
 
 The SDR format contains structural variations (SVs) on the post-repair genome. For specifics of each field, see this proposal: https://www.overleaf.com/project/6ae2588f34a855332b2b307a/share#5f81870d88a34dac55d16c8c074235d36ad1605c8cde85a2
 
-The SDR file, so far, is meant as an input to RadiSeq sequencing simulator, aiming to detect post-repair DNA SVs after sequencing. It does not yet support base alterations and local base damages left by error-prone repair processes (NHEJ, MMEJ).
+The SDR file, so far, is meant as an input to RadiSeq sequencing simulator, aiming to detect post-repair DNA SVs after sequencing. It does not yet support base alterations and local base damages left by error-prone repair processes (NHEJ, MMEJ), but can be easily extended to do so.
 
 Functions modified in Medras-MC are:
   - medrasrepair.misrepairSpectrum_SDR() as a drop in replacement of misrepairSpectrum(). (Medras-MC has been updated, this is no longer a drop in.)
