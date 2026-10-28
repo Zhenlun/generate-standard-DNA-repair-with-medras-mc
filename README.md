@@ -1,17 +1,18 @@
-# generate-SDR-with-medras-mc
+# Medras-MC-SDR-extension
 
 This repo builds on top of Medras-MC to output a Standard DNA Repair (SDR) file.
 
-The SDR file contains information on the repaired genome. For more details, see this proposal: https://www.overleaf.com/read/szzqsthxtjpq#1d4e64
+The SDR format contains structural variations (SVs) on the post-repair genome. For specifics of each field, see this proposal: https://www.overleaf.com/project/6ae2588f34a855332b2b307a/share#5f81870d88a34dac55d16c8c074235d36ad1605c8cde85a2
 
-The SDR file is meant as an input to RadiSeq sequencing simulator, aiming to detect post-repair DNA structural variants after sequencing.
+The SDR file, so far, is meant as an input to RadiSeq sequencing simulator, aiming to detect post-repair DNA SVs after sequencing. It does not yet support base alterations and local base damages left by error-prone repair processes (NHEJ, MMEJ).
 
 Functions modified in Medras-MC are:
-  - medrasrepair.misrepairSpectrum_withoutput() as a drop in replacement of misrepairSpectrum()
-  - The simulation wrapper medrasrepair.repairSimulation() to add functionality to output the SDR file.
+  - medrasrepair.misrepairSpectrum_SDR() as a drop in replacement of misrepairSpectrum(). (Medras-MC has been updated, this is no longer a drop in.)
+  - The simulation wrapper medrasrepair.repairSimulation() is modified to add functionality to output the SDR file.
 
 Functions added are:
-  - medrasrepair.postRepairDNA()
+  - medrasrepair.capture_stdout()
+  - medrasrepair.Spectrum_SDR()
   - The entire standardDnaRepair.py file.
 
 To output an SDR file, use medrasrepair.repairSimulation() with analysisFunction="SpectrumSDR".
@@ -34,8 +35,8 @@ SDRv2.1 Change log:
 
 SDRv2.0 Change log:
 - Added master header - SDR version
-- Changed master header - OLD chromosome size to INTACT chromosome size
-- Changed subheader - NEW chromosome size to MUTATED chromosome size
+- Changed master header - OLD chromosome size to INTACT chromosome size. (old chromosome size still used in the extension code)
+- Changed subheader - NEW chromosome size to MUTATED chromosome size. (new chromosome size still used in the extension code)
 - Added toggle at beginning of standardDnaRepair.py to toggle keep intact strand, print to console and save to current work directory
 - Changed formatting for subheader entries to not use python arrays and have unified format
 - Strand index is no longer continuous. 0 to 45 are always intact strands and 46+ are always mutated strands
